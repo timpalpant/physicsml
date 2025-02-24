@@ -41,6 +41,8 @@ class PooledMACEModule(PhysicsMLModuleBase):
             hidden_irreps=model_config.hidden_irreps,
             avg_num_neighbours=model_config.avg_num_neighbours or 1.0,
             correlation=model_config.correlation,
+            num_elements=model_config.num_elements,
+            use_cueq=model_config.use_cueq,
         )
 
         if model_config.datamodule.y_node_scalars is not None:
@@ -52,6 +54,7 @@ class PooledMACEModule(PhysicsMLModuleBase):
                 ),
                 scaling_std=model_config.scaling_std,
                 scaling_mean=model_config.scaling_mean,
+                use_cueq=model_config.use_cueq,
             )
         else:
             self.node_scalars_head = None
@@ -65,6 +68,7 @@ class PooledMACEModule(PhysicsMLModuleBase):
                 ),
                 scaling_std=model_config.scaling_std,
                 scaling_mean=model_config.scaling_mean,
+                use_cueq=model_config.use_cueq,
             )
         else:
             self.graph_scalars_head = None
@@ -78,6 +82,7 @@ class PooledMACEModule(PhysicsMLModuleBase):
                 out_irreps=o3.Irreps("1o"),
                 scaling_std=model_config.scaling_std,
                 scaling_mean=model_config.scaling_mean,
+                use_cueq=model_config.use_cueq,
             )
         else:
             self.node_vector_head = None
@@ -89,6 +94,7 @@ class PooledMACEModule(PhysicsMLModuleBase):
                 out_irreps=o3.Irreps("1o"),
                 scaling_std=model_config.scaling_std,
                 scaling_mean=model_config.scaling_mean,
+                use_cueq=model_config.use_cueq,
             )
         else:
             self.graph_vector_head = None

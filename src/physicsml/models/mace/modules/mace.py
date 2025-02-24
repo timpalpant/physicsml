@@ -13,6 +13,7 @@ from physicsml.models.mace.modules.blocks import (
     ScaleShiftBlock,
 )
 from physicsml.models.utils import compute_lengths_and_vectors
+from .wrapper_ops import Linear, SphericalHarmonics
 
 
 class MACE(torch.nn.Module):
@@ -32,6 +33,8 @@ class MACE(torch.nn.Module):
         hidden_irreps: str,
         avg_num_neighbours: float,
         correlation: int,
+        num_elements: int,
+        use_cueq: bool,
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -47,16 +50,19 @@ class MACE(torch.nn.Module):
         edge_feats_irreps = o3.Irreps(f"{num_bessel + num_edge_feats}x0e")
 
         # spherical harmonics for edge attrs
-        self.spherical_harmonics = o3.SphericalHarmonics(
+        # TODO: Convert to cuequivariance wrapper
+        self.spherical_harmonics = SphericalHarmonics(
             o3.Irreps.spherical_harmonics(max_ell),
             normalize=True,
             normalization="component",
+            use_cueq=use_cueq,
         )
 
         # Embeddings
-        self.node_embedding = o3.Linear(
+        self.node_embedding = Linear(
             irreps_in=node_attr_irreps,
             irreps_out=node_feats_irreps,
+            use_cueq=use_cueq,
         )
 
         self.radial_embedding = RadialEmbeddingBlock(
@@ -107,6 +113,7 @@ class MACE(torch.nn.Module):
                     interaction_irreps=interaction_irreps,
                     avg_num_neighbours=avg_num_neighbours,
                     mix_with_node_attrs=mix_with_node_attrs,
+                    use_cueq=use_cueq,
                 ),
             )
 
@@ -115,7 +122,9 @@ class MACE(torch.nn.Module):
                     interaction_irreps=interaction_irreps,
                     node_attrs_irreps=node_attr_irreps,
                     hidden_irreps=hidden_irreps_tmp,
+                    num_elements=num_elements,
                     correlation=correlation,
+                    use_cueq=use_cueq,
                 ),
             )
 
@@ -125,6 +134,7 @@ class MACE(torch.nn.Module):
                     node_attrs_irreps=node_attr_irreps,
                     hidden_irreps=hidden_irreps_tmp,
                     residual_connection=residual_connection,
+                    use_cueq=use_cueq,
                 ),
             )
 
@@ -183,6 +193,7 @@ class ReadoutHead(torch.nn.Module):
         out_irreps: o3.Irreps,
         scaling_std: float,
         scaling_mean: float,
+        use_cueq: bool,
     ) -> None:
         super().__init__()
 
@@ -191,11 +202,11 @@ class ReadoutHead(torch.nn.Module):
         for idx, in_irreps in enumerate(list_in_irreps):
             if idx < len(list_in_irreps) - 1:
                 self.readouts.append(
-                    o3.Linear(irreps_in=in_irreps, irreps_out=out_irreps),
+                    Linear(irreps_in=in_irreps, irreps_out=out_irreps, use_cueq=use_cueq),
                 )
             else:
                 self.readouts.append(
-                    NonLinearReadoutBlock(in_irreps, mlp_irreps, out_irreps),
+                    NonLinearReadoutBlock(in_irreps, mlp_irreps, out_irreps, use_cueq=use_cueq),
                 )
 
         self.scale_shift = ScaleShiftBlock(scale=scaling_std, shift=scaling_mean)
@@ -222,6 +233,7 @@ class PooledReadoutHead(torch.nn.Module):
         out_irreps: o3.Irreps,
         scaling_std: float,
         scaling_mean: float,
+        use_cueq: bool,
     ) -> None:
         super().__init__()
 
@@ -230,11 +242,11 @@ class PooledReadoutHead(torch.nn.Module):
         for idx, in_irreps in enumerate(list_in_irreps):
             if idx < len(list_in_irreps) - 1:
                 self.readouts.append(
-                    o3.Linear(irreps_in=in_irreps, irreps_out=out_irreps),
+                    Linear(irreps_in=in_irreps, irreps_out=out_irreps, use_cueq=use_cueq),
                 )
             else:
                 self.readouts.append(
-                    NonLinearReadoutBlock(in_irreps, mlp_irreps, out_irreps),
+                    NonLinearReadoutBlock(in_irreps, mlp_irreps, out_irreps, use_cueq=use_cueq),
                 )
 
         self.scale_shift = ScaleShiftBlock(scale=scaling_std, shift=scaling_mean)

@@ -5,7 +5,7 @@ from torch_geometric.utils import scatter
 from ._activation import Activation
 from .irreps_tools import reshape_irreps, tp_out_irreps_with_instructions
 from .radial import BesselBasis, PolynomialCutoff
-from .symmetric_contraction import SymmetricContraction
+from .wrapper_ops import Linear, TensorProduct, FullyConnectedTensorProduct, SymmetricContractionWrapper
 
 
 class NonLinearReadoutBlock(torch.nn.Module):
@@ -14,12 +14,13 @@ class NonLinearReadoutBlock(torch.nn.Module):
         irreps_in: o3.Irreps,
         MLP_irreps: o3.Irreps,
         irreps_out: o3.Irreps,
+        use_cueq: bool,
     ) -> None:
         super().__init__()
 
-        self.linear_1 = o3.Linear(irreps_in=irreps_in, irreps_out=MLP_irreps)
+        self.linear_1 = Linear(irreps_in=irreps_in, irreps_out=MLP_irreps, use_cueq=use_cueq)
         self.non_linearity = Activation(irreps_in=MLP_irreps, acts=[torch.nn.SiLU()])
-        self.linear_2 = o3.Linear(irreps_in=MLP_irreps, irreps_out=irreps_out)
+        self.linear_2 = Linear(irreps_in=MLP_irreps, irreps_out=irreps_out, use_cueq=use_cueq)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
         x = self.linear_1(x)
@@ -58,23 +59,26 @@ class NodeUpdateBlock(torch.nn.Module):
         node_feats_irreps: o3.Irreps,
         hidden_irreps: o3.Irreps,
         residual_connection: bool,
+        use_cueq: bool,
     ) -> None:
         super().__init__()
 
         # net to compute W m_i
-        self.linear = o3.Linear(
+        self.linear = Linear(
             hidden_irreps,
             hidden_irreps,
             internal_weights=True,
             shared_weights=True,
+            use_cueq=use_cueq,
         )
 
         if residual_connection:
             # residual connection from original node attrs and node features
-            self.residual_connection_layer = o3.FullyConnectedTensorProduct(
+            self.residual_connection_layer = FullyConnectedTensorProduct(
                 node_feats_irreps,
                 node_attrs_irreps,
                 hidden_irreps,
+                use_cueq=use_cueq,
             )
         else:
             self.residual_connection_layer = None
@@ -102,16 +106,20 @@ class MessageBlock(torch.nn.Module):
         interaction_irreps: o3.Irreps,
         node_attrs_irreps: o3.Irreps,
         hidden_irreps: o3.Irreps,
+        num_elements: int,
         correlation: int,
+        use_cueq: bool,
     ) -> None:
         super().__init__()
 
         # symmetric contraction to make A_i into messages m_i = W B_i
-        self.symmetric_contractions = SymmetricContraction(
+        self.symmetric_contractions = SymmetricContractionWrapper(
             irreps_in=interaction_irreps,
             irreps_out=hidden_irreps,
+            node_attrs_irreps=node_attrs_irreps,
             correlation=correlation,
-            num_elements=node_attrs_irreps.dim,
+            num_elements=num_elements,
+            use_cueq=use_cueq,
         )
 
     def forward(self, a_i: torch.Tensor, node_attrs: torch.Tensor) -> torch.Tensor:
@@ -131,16 +139,18 @@ class InteractionBlock(torch.nn.Module):
         interaction_irreps: o3.Irreps,
         avg_num_neighbours: float,
         mix_with_node_attrs: bool = False,
+        use_cueq: bool = False,
     ) -> None:
         super().__init__()
 
         self.avg_num_neighbours = avg_num_neighbours
 
-        self.linear_node_feats = o3.Linear(
+        self.linear_node_feats = Linear(
             node_feats_irreps,
             node_feats_irreps,
             internal_weights=True,
             shared_weights=True,
+            use_cueq=use_cueq,
         )
 
         # TensorProduct
@@ -161,30 +171,33 @@ class InteractionBlock(torch.nn.Module):
 
         # product to do
         # \sum_{l1_l2_m1_m2} (CGs) (R_ij_k_l1_l2_l3) (Y_ij_l1_m1) (W h)_j_k_l2_m2 -> A_ij_k_l3_m3
-        self.conv_tp = o3.TensorProduct(
+        self.conv_tp = TensorProduct(
             node_feats_irreps,
             edge_attrs_irreps,
             tp_out_irreps,
             instructions=instructions,
             shared_weights=False,
             internal_weights=False,
+            use_cueq=use_cueq,
         )
 
         # linear to take the tp_out_irreps (which are a subset of interaction_irreps,
         # since prod node_feats_irreps and edge_attrs_irreps doesn't necessarily
         # give all interaction_irreps
-        self.linear = o3.Linear(
+        self.linear = Linear(
             tp_out_irreps.simplify(),
             interaction_irreps,
             internal_weights=True,
             shared_weights=True,
+            use_cueq=use_cueq,
         )
 
         if mix_with_node_attrs:
-            self.mix_layer = o3.FullyConnectedTensorProduct(
+            self.mix_layer = FullyConnectedTensorProduct(
                 interaction_irreps,
                 node_attrs_irreps,
                 interaction_irreps,
+                use_cueq=use_cueq,
             )
         else:
             self.mix_layer = None

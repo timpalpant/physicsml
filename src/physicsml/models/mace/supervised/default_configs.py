@@ -8,6 +8,8 @@ from physicsml.lightning.config import ConfigDict, PhysicsMLModelConfig
 
 @dataclasses.dataclass(config=ConfigDict)
 class MACEModelConfig(PhysicsMLModelConfig):
+    num_elements: int = 0
+    use_cueq: bool = False
     num_node_feats: int = 0
     num_edge_feats: int = 0
     num_bessel: int = 8
