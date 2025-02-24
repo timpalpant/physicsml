@@ -113,12 +113,11 @@ class Linear:
                 cue.Irreps(cueq_config.group, irreps_out),
                 layout=cueq_config.layout,
                 shared_weights=shared_weights,
-                optimize_fallback=True,
             )
             instance.original_forward = instance.forward
 
             def cuet_forward(self, x: torch.Tensor) -> torch.Tensor:
-                return self.original_forward(x, use_fallback=True)
+                return self.original_forward(x)
 
             instance.forward = types.MethodType(cuet_forward, instance)
             return instance
@@ -164,7 +163,7 @@ class TensorProduct:
             def cuet_forward(
                 self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor
             ) -> torch.Tensor:
-                return self.original_forward(x, y, z, use_fallback=None)
+                return self.original_forward(x, y, z)
 
             instance.forward = types.MethodType(cuet_forward, instance)
             return instance
@@ -205,14 +204,13 @@ class FullyConnectedTensorProduct:
                 layout=cueq_config.layout,
                 shared_weights=shared_weights,
                 internal_weights=internal_weights,
-                optimize_fallback=True,
             )
             instance.original_forward = instance.forward
 
             def cuet_forward(
                 self, x: torch.Tensor, attrs: torch.Tensor
             ) -> torch.Tensor:
-                return self.original_forward(x, attrs, use_fallback=True)
+                return self.original_forward(x, attrs)
 
             instance.forward = types.MethodType(cuet_forward, instance)
             return instance
@@ -235,7 +233,7 @@ class SymmetricContractionWrapper:
         irreps_out: o3.Irreps,
         node_attrs_irreps: o3.Irreps,
         correlation: int,
-        num_elements: Optional[int] = None,
+        num_elements: int,
         use_cueq: bool = False,
     ):
         cueq_config = default_cueq_config if use_cueq else None
@@ -268,7 +266,6 @@ class SymmetricContractionWrapper:
                 return self.original_forward(
                     x.flatten(1),
                     index_attrs,
-                    use_fallback=None,
                 )
 
             instance.forward = types.MethodType(cuet_forward, instance)
@@ -292,6 +289,12 @@ class SphericalHarmonics:
         normalization: str = "component",
         use_cueq: bool = False,
     ):
+        o3_sh = o3.SphericalHarmonics(
+            irreps_in,
+            normalize=normalize,
+            normalization=normalization,
+        )
+
         cueq_config = default_cueq_config if use_cueq else None
         if (
             CUET_AVAILABLE
@@ -299,15 +302,12 @@ class SphericalHarmonics:
             and cueq_config.enabled
             and (cueq_config.optimize_all or cueq_config.optimize_spherical_harmonics)
         ):
-            return cuet.SphericalHarmonics(
-                cue.Irreps(cueq_config.group, irreps_in),
+            cuet_sh = cuet.SphericalHarmonics(
+                irreps_in.ls,
                 normalize=normalize,
             )
+            cuet_sh.irreps_out = o3_sh.irreps_out
+            return cuet_sh
 
-        return o3.SphericalHarmonics(
-            irreps_in,
-            normalize=normalize,
-            normalization=normalization,
-        )
-
+        return o3_sh
 
