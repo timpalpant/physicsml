@@ -93,6 +93,7 @@ class Contraction(torch.nn.Module):
         self.num_features = irreps_in.count((0, 1))
         self.coupling_irreps = o3.Irreps([irrep.ir for irrep in irreps_in])
         self.correlation = correlation
+        self.num_elements = num_elements
         U_matrices: Dict[str, torch.Tensor] = {}
         for nu in range(1, correlation + 1):
             U_matrix = U_matrix_real(
@@ -216,11 +217,12 @@ class Contraction(torch.nn.Module):
             self.weights_max = weights[-1]  # type: ignore
 
     def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        one_hot_atomic_numbers = y[:, :self.num_elements]
         out = self.graph_opt_main(
             self.U_mat(self.correlation),
             self.weights_max,
             x,
-            y,
+            one_hot_atomic_numbers,
         )
         for i, (weight, contract_weights, contract_features) in enumerate(
             zip(self.weights, self.contractions_weighting, self.contractions_features),
@@ -228,7 +230,7 @@ class Contraction(torch.nn.Module):
             c_tensor = contract_weights(
                 self.U_mat(self.correlation - i - 1),
                 weight,
-                y,
+                one_hot_atomic_numbers,
             )
             c_tensor = c_tensor + out
             out = contract_features(c_tensor, x)

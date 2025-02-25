@@ -231,7 +231,6 @@ class SymmetricContractionWrapper:
         cls,
         irreps_in: o3.Irreps,
         irreps_out: o3.Irreps,
-        node_attrs_irreps: o3.Irreps,
         correlation: int,
         num_elements: int,
         use_cueq: bool = False,
@@ -275,7 +274,7 @@ class SymmetricContractionWrapper:
             irreps_in=irreps_in,
             irreps_out=irreps_out,
             correlation=correlation,
-            num_elements=node_attrs_irreps.dim,
+            num_elements=num_elements,
         )
 
 

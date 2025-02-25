@@ -116,7 +116,6 @@ class MessageBlock(torch.nn.Module):
         self.symmetric_contractions = SymmetricContractionWrapper(
             irreps_in=interaction_irreps,
             irreps_out=hidden_irreps,
-            node_attrs_irreps=node_attrs_irreps,
             correlation=correlation,
             num_elements=num_elements,
             use_cueq=use_cueq,
