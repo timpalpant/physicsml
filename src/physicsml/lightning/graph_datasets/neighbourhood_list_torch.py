@@ -60,7 +60,12 @@ def construct_edge_indices_and_attrs(
     cell: torch.Tensor | None,
     self_interaction: bool,
 ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor]:
-    if (pbc is not None) and all(pbc) and (cell is not None):
+    # Use neighborlist if >500 atoms, otherwise use naive N^2 algorithm.
+    if pbc is None or cell is None and positions.shape[0] > 500:
+        pbc = (False, False, False)
+        pos_max = positions.abs().max()
+        cell = 2 * pos_max * torch.eye(3, dtype=positions.dtype, device=positions.device)
+    if (pbc is not None) and (cell is not None):
         cell = cell.type(positions.dtype).to(positions.device)
 
         # solve pos = coefs^T @ cell
