@@ -35,6 +35,7 @@ class MACE(torch.nn.Module):
         correlation: int,
         num_elements: int,
         use_cueq: bool,
+        use_oeq: bool,
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -50,7 +51,6 @@ class MACE(torch.nn.Module):
         edge_feats_irreps = o3.Irreps(f"{num_bessel + num_edge_feats}x0e")
 
         # spherical harmonics for edge attrs
-        # TODO: Convert to cuequivariance wrapper
         self.spherical_harmonics = SphericalHarmonics(
             o3.Irreps.spherical_harmonics(max_ell),
             normalize=True,
@@ -114,6 +114,7 @@ class MACE(torch.nn.Module):
                     avg_num_neighbours=avg_num_neighbours,
                     mix_with_node_attrs=mix_with_node_attrs,
                     use_cueq=use_cueq,
+                    use_oeq=use_oeq,
                 ),
             )
 

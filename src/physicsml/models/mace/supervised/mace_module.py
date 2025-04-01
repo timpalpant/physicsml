@@ -43,6 +43,7 @@ class PooledMACEModule(PhysicsMLModuleBase):
             correlation=model_config.correlation,
             num_elements=model_config.num_elements,
             use_cueq=model_config.use_cueq,
+            use_oeq=model_config.use_oeq,
         )
 
         if model_config.datamodule.y_node_scalars is not None:

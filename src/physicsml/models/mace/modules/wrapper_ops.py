@@ -21,6 +21,16 @@ try:
 except ImportError:
     CUET_AVAILABLE = False
 
+try:
+    import openequivariance as oeq
+
+    OEQ_AVAILABLE = True
+except ImportError:
+    OEQ_AVAILABLE = False
+    print(
+        "OpenEquivariance is not available. OpenEquivariance acceleration will be disabled."
+    )
+
 if CUET_AVAILABLE:
 
     class O3_e3nn(cue.O3):
@@ -90,6 +100,20 @@ default_cueq_config = CuEquivarianceConfig(
 )
 
 
+@dataclasses.dataclass
+class OpenEquivarianceConfig:
+    """Configuration for OpenEquivariance acceleration"""
+
+    enabled: bool = False
+    conv_fusion: Optional[str] = None
+
+
+default_oeq_config = OpenEquivarianceConfig(
+    enabled=True,
+    conv_fusion="atomic",
+)
+
+
 class Linear:
     """Returns either a cuet.Linear or o3.Linear based on config"""
 
@@ -142,8 +166,10 @@ class TensorProduct:
         shared_weights: bool = False,
         internal_weights: bool = False,
         use_cueq: bool = False,
+        use_oeq: bool = False,
     ):
         cueq_config = default_cueq_config if use_cueq else None
+        oeq_config = default_oeq_config if use_oeq else None
         if (
             CUET_AVAILABLE
             and cueq_config is not None
@@ -167,6 +193,36 @@ class TensorProduct:
 
             instance.forward = types.MethodType(cuet_forward, instance)
             return instance
+        elif (OEQ_AVAILABLE and oeq_config is not None and oeq_config.enabled):
+            irrep_dtype = None
+            weight_dtype = None
+            torch_dtype = torch.get_default_dtype()
+
+            if torch_dtype == torch.float32:
+                irrep_dtype = np.float32
+                weight_dtype = np.float32
+            elif torch_dtype == torch.float64:
+                irrep_dtype = np.float64
+                weight_dtype = np.float64 
+
+            tpp = oeq.TPProblem(oeq.Irreps(str(irreps_in1)), oeq.Irreps(str(irreps_in2)), oeq.Irreps(str(irreps_out)), 
+                instructions, shared_weights=shared_weights, internal_weights=internal_weights,
+                irrep_dtype=irrep_dtype,
+                weight_dtype=weight_dtype)
+
+            tp_impl = None
+            if oeq_config.conv_fusion == "atomic":
+                tp_impl = oeq.TensorProductConv(tpp, torch_op=True, deterministic=False)
+            elif oeq_config.conv_fusion == "deterministic":
+                tp_impl = oeq.TensorProductConv(tpp, torch_op=True, deterministic=True)
+            elif oeq_config.conv_fusion is None:
+                tp_impl = oeq.TensorProduct(tpp, torch_op=True)
+            else:
+                raise ValueError("Invalid value for conv_fusion argument")
+
+            tp_impl.weight_numel = tpp.weight_numel
+            return tp_impl
+
 
         return o3.TensorProduct(
             irreps_in1,

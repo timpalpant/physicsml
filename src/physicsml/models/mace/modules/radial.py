@@ -1,8 +1,10 @@
 from math import sqrt
 
+from e3nn.util.jit import compile_mode
 import torch
 
 
+@compile_mode("script")
 class BesselBasis(torch.nn.Module):
     def __init__(
         self,
@@ -29,6 +31,7 @@ class BesselBasis(torch.nn.Module):
         return bessel_funcs
 
 
+@compile_mode("script")
 class PolynomialCutoff(torch.nn.Module):
     def __init__(self, r_max: float, p: int = 6) -> None:
         super().__init__()

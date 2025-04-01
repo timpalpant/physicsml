@@ -10,6 +10,7 @@ from physicsml.lightning.config import ConfigDict, PhysicsMLModelConfig
 class MACEModelConfig(PhysicsMLModelConfig):
     num_elements: int = 0
     use_cueq: bool = False
+    use_oeq: bool = False
     num_node_feats: int = 0
     num_edge_feats: int = 0
     num_bessel: int = 8

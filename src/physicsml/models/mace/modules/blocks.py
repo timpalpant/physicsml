@@ -1,13 +1,16 @@
 import torch
 from e3nn import nn, o3
+from e3nn.util.jit import compile_mode, simplify_if_compile
 from torch_geometric.utils import scatter
 
 from ._activation import Activation
 from .irreps_tools import reshape_irreps, tp_out_irreps_with_instructions
 from .radial import BesselBasis, PolynomialCutoff
-from .wrapper_ops import Linear, TensorProduct, FullyConnectedTensorProduct, SymmetricContractionWrapper
+from .wrapper_ops import Linear, TensorProduct, FullyConnectedTensorProduct, SymmetricContractionWrapper, default_cueq_config, default_oeq_config
 
 
+@simplify_if_compile
+@compile_mode("script")
 class NonLinearReadoutBlock(torch.nn.Module):
     def __init__(
         self,
@@ -29,6 +32,7 @@ class NonLinearReadoutBlock(torch.nn.Module):
         return x
 
 
+@compile_mode("script")
 class RadialEmbeddingBlock(torch.nn.Module):
     def __init__(
         self,
@@ -52,6 +56,7 @@ class RadialEmbeddingBlock(torch.nn.Module):
         return output
 
 
+@compile_mode("script")
 class NodeUpdateBlock(torch.nn.Module):
     def __init__(
         self,
@@ -128,6 +133,7 @@ class MessageBlock(torch.nn.Module):
         return m_i
 
 
+@compile_mode("script")
 class InteractionBlock(torch.nn.Module):
     def __init__(
         self,
@@ -139,6 +145,7 @@ class InteractionBlock(torch.nn.Module):
         avg_num_neighbours: float,
         mix_with_node_attrs: bool = False,
         use_cueq: bool = False,
+        use_oeq: bool = False,
     ) -> None:
         super().__init__()
 
@@ -178,6 +185,7 @@ class InteractionBlock(torch.nn.Module):
             shared_weights=False,
             internal_weights=False,
             use_cueq=use_cueq,
+            use_oeq=use_oeq,
         )
 
         # linear to take the tp_out_irreps (which are a subset of interaction_irreps,
@@ -202,7 +210,9 @@ class InteractionBlock(torch.nn.Module):
             self.mix_layer = None
 
         # reshape the [n_nodes, num_feats * (\sum_l 2l+1)] -> [n_nodes, num_feats, (\sum_l 2l+1)]
-        self.reshape = reshape_irreps(interaction_irreps)
+        cueq_config = default_cueq_config if use_cueq else None
+        self.reshape = reshape_irreps(interaction_irreps, cueq_config=cueq_config)
+        self.oeq_config = default_oeq_config if use_oeq else None
 
     def forward(
         self,
@@ -222,20 +232,28 @@ class InteractionBlock(torch.nn.Module):
         # compute R_ij_k_l1_l2_l3
         r_ij_k_l1_l2_l3 = self.net_R_channels(edge_feats)
 
-        # compute A_ij_k_l3_m3. Remember that edge_attrs = Y_ij_l1_m1. shape = [n_edges, irreps]
-        tp_a_ij_k_l3_m3 = self.conv_tp(
-            w_h_j_k_l2_m2[sender],
-            edge_attrs,
-            r_ij_k_l1_l2_l3,
-        )
+        if self.oeq_config \
+                and self.oeq_config.enabled \
+                and self.oeq_config.conv_fusion:
+            if self.oeq_config.conv_fusion == "atomic":
+                tp_a_i_k_l3_m3 = self.conv_tp.forward(w_h_j_k_l2_m2, edge_attrs, r_ij_k_l1_l2_l3, receiver, sender)
+            else:
+                tp_a_i_k_l3_m3 = self.conv_tp.forward(w_h_j_k_l2_m2, edge_attrs, r_ij_k_l1_l2_l3, receiver, sender, edge_index[2])
+        else:
+            # compute A_ij_k_l3_m3. Remember that edge_attrs = Y_ij_l1_m1. shape = [n_edges, irreps]
+            tp_a_ij_k_l3_m3 = self.conv_tp(
+                w_h_j_k_l2_m2[sender],
+                edge_attrs,
+                r_ij_k_l1_l2_l3,
+            )
 
-        # sum over neighbours, shape = [n_nodes, irreps]
-        tp_a_i_k_l3_m3 = scatter(
-            src=tp_a_ij_k_l3_m3,
-            index=receiver,
-            dim=0,
-            dim_size=num_nodes,
-        )
+            # sum over neighbours, shape = [n_nodes, irreps]
+            tp_a_i_k_l3_m3 = scatter(
+                src=tp_a_ij_k_l3_m3,
+                index=receiver,
+                dim=0,
+                dim_size=num_nodes,
+            )
 
         # embed into correct interaction_irreps and divide by average num neighbours
         tp_a_i_k_l3_m3 = self.linear(tp_a_i_k_l3_m3) / self.avg_num_neighbours
@@ -249,6 +267,7 @@ class InteractionBlock(torch.nn.Module):
         return a_i_k_l3_m3
 
 
+@compile_mode("script")
 class ScaleShiftBlock(torch.nn.Module):
     def __init__(self, scale: float | None, shift: float | None) -> None:
         super().__init__()

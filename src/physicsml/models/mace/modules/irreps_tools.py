@@ -9,6 +9,8 @@ import torch
 from e3nn import o3
 from e3nn.util.jit import compile_mode
 
+from .wrapper_ops import CuEquivarianceConfig
+
 
 # Based on mir-group/nequip
 def tp_out_irreps_with_instructions(
@@ -45,9 +47,12 @@ def tp_out_irreps_with_instructions(
 
 @compile_mode("script")
 class reshape_irreps(torch.nn.Module):
-    def __init__(self, irreps: o3.Irreps) -> None:
+    def __init__(
+        self, irreps: o3.Irreps, cueq_config: CuEquivarianceConfig | None = None
+    ) -> None:
         super().__init__()
         self.irreps = o3.Irreps(irreps)
+        self.cueq_config = cueq_config
         self.dims = []
         self.muls = []
         for mul, ir in self.irreps:
@@ -59,9 +64,20 @@ class reshape_irreps(torch.nn.Module):
         ix = 0
         out = []
         batch, _ = tensor.shape
-        for mul, d in zip(self.muls, self.dims, strict=False):
+        for mul, d in zip(self.muls, self.dims):
             field = tensor[:, ix : ix + mul * d]  # [batch, sample, mul * repr]
             ix += mul * d
-            field = field.reshape(batch, mul, d)
+            if self.cueq_config is not None:
+                if self.cueq_config.layout_str == "mul_ir":
+                    field = field.reshape(batch, mul, d)
+                else:
+                    field = field.reshape(batch, d, mul)
+            else:
+                field = field.reshape(batch, mul, d)
             out.append(field)
+
+        if self.cueq_config is not None:
+            if self.cueq_config.layout_str == "mul_ir":
+                return torch.cat(out, dim=-1)
+            return torch.cat(out, dim=-2)
         return torch.cat(out, dim=-1)
