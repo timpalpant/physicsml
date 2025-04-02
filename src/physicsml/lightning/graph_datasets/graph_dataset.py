@@ -32,7 +32,7 @@ class GraphDatum(Data):
         self,
         raw_atomic_numbers: torch.Tensor | None,  # [n_nodes]
         atomic_numbers: torch.Tensor | None,  # [n_nodes]
-        edge_index: torch.Tensor | None,  # [2, n_edges]
+        edge_index: torch.Tensor | None,  # [3, n_edges]
         node_attrs: torch.Tensor | None,  # [n_nodes, n_node_attrs]
         edge_attrs: torch.Tensor | None,  # [n_edges, n_edge_attrs]
         graph_attrs: torch.Tensor | None,  # [1, n_graph_attrs]
@@ -53,7 +53,7 @@ class GraphDatum(Data):
             num_nodes = None
 
         # Check shapes
-        assert (coordinates is None) or (coordinates.shape[1] == 3)
+        assert coordinates is None or coordinates.shape == (num_nodes, 3)
         assert (cell_shift_vector is None) or (cell_shift_vector.shape[1] == 3)
 
         assert y_node_scalars is None or (

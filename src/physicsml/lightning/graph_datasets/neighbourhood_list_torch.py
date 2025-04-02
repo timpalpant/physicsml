@@ -3,6 +3,7 @@ from torch_geometric.utils import (
     coalesce,
     to_undirected,
 )
+from torch_geometric import EdgeIndex
 
 from physicsml.lightning.graph_datasets.torch_nl_vendored.neighbor_list import (
     compute_neighborlist,
@@ -50,7 +51,6 @@ def compute_neighborlist_n2_no_cell(
     )
 
 
-@torch.jit.script
 def construct_edge_indices_and_attrs(
     positions: torch.Tensor,
     cutoff: float,
@@ -171,5 +171,13 @@ def construct_edge_indices_and_attrs(
         edge_indices = nbhd_edge_indices.T
         edge_attrs = None
         cell_shift_vector = nbhd_cell_shift_vector
+
+    edge_indices = EdgeIndex(edge_indices)
+    # Sort by receiver index for the forward pass.
+    edge_indices, receiver_perm = edge_indices.sort_by("col")
+    # Sort by sender index 
+    _, transpose_perm = edge_indices.sort_by("row")
+    edge_indices = torch.cat((edge_indices, torch.unsqueeze(transpose_perm, 0)))
+    cell_shift_vector = cell_shift_vector[receiver_perm]
 
     return edge_indices, edge_attrs, cell_shift_vector

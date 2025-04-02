@@ -232,9 +232,7 @@ class InteractionBlock(torch.nn.Module):
         # compute R_ij_k_l1_l2_l3
         r_ij_k_l1_l2_l3 = self.net_R_channels(edge_feats)
 
-        if self.oeq_config \
-                and self.oeq_config.enabled \
-                and self.oeq_config.conv_fusion:
+        if self.oeq_config and self.oeq_config.enabled and self.oeq_config.conv_fusion:
             if self.oeq_config.conv_fusion == "atomic":
                 tp_a_i_k_l3_m3 = self.conv_tp.forward(w_h_j_k_l2_m2, edge_attrs, r_ij_k_l1_l2_l3, receiver, sender)
             else:

@@ -20,6 +20,9 @@ try:
     CUET_AVAILABLE = True
 except ImportError:
     CUET_AVAILABLE = False
+    print(
+        "cuequivariance or cuequivariance_torch is not available. Cuequivariance acceleration will be disabled."
+    )
 
 try:
     import openequivariance as oeq
@@ -63,11 +66,6 @@ if CUET_AVAILABLE:
                 yield O3_e3nn(l=l, p=1 * (-1) ** l)
                 yield O3_e3nn(l=l, p=-1 * (-1) ** l)
 
-else:
-    print(
-        "cuequivariance or cuequivariance_torch is not available. Cuequivariance acceleration will be disabled."
-    )
-
 
 @dataclasses.dataclass
 class CuEquivarianceConfig:
@@ -110,7 +108,7 @@ class OpenEquivarianceConfig:
 
 default_oeq_config = OpenEquivarianceConfig(
     enabled=True,
-    conv_fusion="atomic",
+    conv_fusion="deterministic",
 )
 
 
@@ -170,30 +168,7 @@ class TensorProduct:
     ):
         cueq_config = default_cueq_config if use_cueq else None
         oeq_config = default_oeq_config if use_oeq else None
-        if (
-            CUET_AVAILABLE
-            and cueq_config is not None
-            and cueq_config.enabled
-            and (cueq_config.optimize_all or cueq_config.optimize_channelwise)
-        ):
-            instance = cuet.ChannelWiseTensorProduct(
-                cue.Irreps(cueq_config.group, irreps_in1),
-                cue.Irreps(cueq_config.group, irreps_in2),
-                cue.Irreps(cueq_config.group, irreps_out),
-                layout=cueq_config.layout,
-                shared_weights=shared_weights,
-                internal_weights=internal_weights,
-            )
-            instance.original_forward = instance.forward
-
-            def cuet_forward(
-                self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor
-            ) -> torch.Tensor:
-                return self.original_forward(x, y, z)
-
-            instance.forward = types.MethodType(cuet_forward, instance)
-            return instance
-        elif (OEQ_AVAILABLE and oeq_config is not None and oeq_config.enabled):
+        if (OEQ_AVAILABLE and oeq_config is not None and oeq_config.enabled):
             irrep_dtype = None
             weight_dtype = None
             torch_dtype = torch.get_default_dtype()
@@ -222,6 +197,30 @@ class TensorProduct:
 
             tp_impl.weight_numel = tpp.weight_numel
             return tp_impl
+
+        if (
+            CUET_AVAILABLE
+            and cueq_config is not None
+            and cueq_config.enabled
+            and (cueq_config.optimize_all or cueq_config.optimize_channelwise)
+        ):
+            instance = cuet.ChannelWiseTensorProduct(
+                cue.Irreps(cueq_config.group, irreps_in1),
+                cue.Irreps(cueq_config.group, irreps_in2),
+                cue.Irreps(cueq_config.group, irreps_out),
+                layout=cueq_config.layout,
+                shared_weights=shared_weights,
+                internal_weights=internal_weights,
+            )
+            instance.original_forward = instance.forward
+
+            def cuet_forward(
+                self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor
+            ) -> torch.Tensor:
+                return self.original_forward(x, y, z)
+
+            instance.forward = types.MethodType(cuet_forward, instance)
+            return instance
 
 
         return o3.TensorProduct(
