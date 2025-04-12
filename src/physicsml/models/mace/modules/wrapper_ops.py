@@ -108,7 +108,7 @@ class OpenEquivarianceConfig:
 
 default_oeq_config = OpenEquivarianceConfig(
     enabled=True,
-    conv_fusion="deterministic",
+    conv_fusion="atomic",
 )
 
 

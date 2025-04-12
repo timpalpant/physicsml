@@ -225,7 +225,7 @@ class PhysicsMLModelBase(
     def to_openmm(self, **kwargs: Any) -> Any:
         from physicsml.plugins.openmm.openmm_graph import OpenMMGraph
 
-        return OpenMMGraph(**kwargs)
+        return OpenMMGraph(self, **kwargs)
 
     def to_ase(self, **kwargs: Any) -> Any:
         try:

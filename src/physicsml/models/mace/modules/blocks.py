@@ -212,7 +212,7 @@ class InteractionBlock(torch.nn.Module):
         # reshape the [n_nodes, num_feats * (\sum_l 2l+1)] -> [n_nodes, num_feats, (\sum_l 2l+1)]
         cueq_config = default_cueq_config if use_cueq else None
         self.reshape = reshape_irreps(interaction_irreps, cueq_config=cueq_config)
-        self.oeq_config = default_oeq_config if use_oeq else None
+        self.conv_fusion = default_oeq_config.conv_fusion if use_oeq else ""
 
     def forward(
         self,
@@ -232,11 +232,10 @@ class InteractionBlock(torch.nn.Module):
         # compute R_ij_k_l1_l2_l3
         r_ij_k_l1_l2_l3 = self.net_R_channels(edge_feats)
 
-        if self.oeq_config and self.oeq_config.enabled and self.oeq_config.conv_fusion:
-            if self.oeq_config.conv_fusion == "atomic":
-                tp_a_i_k_l3_m3 = self.conv_tp.forward(w_h_j_k_l2_m2, edge_attrs, r_ij_k_l1_l2_l3, receiver, sender)
-            else:
-                tp_a_i_k_l3_m3 = self.conv_tp.forward(w_h_j_k_l2_m2, edge_attrs, r_ij_k_l1_l2_l3, receiver, sender, edge_index[2])
+        if self.conv_fusion == "deterministic":
+            tp_a_i_k_l3_m3 = self.conv_tp.forward(w_h_j_k_l2_m2, edge_attrs, r_ij_k_l1_l2_l3, receiver, sender, edge_index[2])
+        elif self.conv_fusion == "atomic":
+            tp_a_i_k_l3_m3 = self.conv_tp.forward(w_h_j_k_l2_m2, edge_attrs, r_ij_k_l1_l2_l3, receiver, sender)
         else:
             # compute A_ij_k_l3_m3. Remember that edge_attrs = Y_ij_l1_m1. shape = [n_edges, irreps]
             tp_a_ij_k_l3_m3 = self.conv_tp(
